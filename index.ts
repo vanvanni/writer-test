@@ -1,6 +1,10 @@
+import { readdir, unlink } from 'fs/promises';
+import { join } from 'path';
+
 const STORAGE_DIR = './storage';
 const SNAPSHOTS_DIR = './storage/snapshots';
 const COUNT_FILE = './storage/count.json';
+const GENERATION_FILE = './storage/generation.json';
 const MAX_COUNT = 2500;
 
 interface CountData {
@@ -13,9 +17,53 @@ interface Snapshot {
   timestamp: string;
 }
 
+interface Generation {
+  generation: number;
+  lastReset: string;
+}
+
 async function ensureDirectories() {
   try {
     await Bun.write(`${SNAPSHOTS_DIR}/.keep`, '');
+  } catch {}
+}
+
+async function getGeneration(): Promise<number> {
+  try {
+    const file = Bun.file(GENERATION_FILE);
+    if (await file.exists()) {
+      const data = await file.json() as Generation;
+      return data.generation;
+    }
+  } catch {}
+  return 0;
+}
+
+async function incrementGeneration(): Promise<number> {
+  const current = await getGeneration();
+  const next = current + 1;
+  const data: Generation = {
+    generation: next,
+    lastReset: new Date().toISOString()
+  };
+  await Bun.write(GENERATION_FILE, JSON.stringify(data, null, 2));
+  return next;
+}
+
+async function deleteAllFiles() {
+  try {
+    if (await Bun.file(COUNT_FILE).exists()) {
+      await Bun.write(COUNT_FILE, '{}');
+    }
+    
+    const entries = await readdir(SNAPSHOTS_DIR);
+    for (const entry of entries) {
+      if (entry.startsWith('snapshot-') && entry.endsWith('.json')) {
+        try {
+          await unlink(join(SNAPSHOTS_DIR, entry));
+        } catch {}
+      }
+    }
   } catch {}
 }
 
@@ -24,9 +72,7 @@ async function initCount(): Promise<CountData> {
     const file = Bun.file(COUNT_FILE);
     if (await file.exists()) {
       const data = await file.json() as CountData;
-      return data.count >= MAX_COUNT 
-        ? { count: MAX_COUNT, lastUpdated: new Date().toISOString() } 
-        : data;
+      return data;
     }
   } catch {}
   
@@ -36,8 +82,6 @@ async function initCount(): Promise<CountData> {
 }
 
 async function updateCount(current: CountData): Promise<CountData> {
-  if (current.count >= MAX_COUNT) return current;
-  
   const updated: CountData = {
     count: current.count + 1,
     lastUpdated: new Date().toISOString()
@@ -62,11 +106,12 @@ function randomInterval(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function main() {
+async function startCounter() {
   await ensureDirectories();
+  const generation = await getGeneration();
   let countData = await initCount();
   
-  console.log(`Starting counter from ${countData.count} to ${MAX_COUNT}`);
+  console.log(`Generation ${generation} - Starting counter from ${countData.count} to ${MAX_COUNT}`);
   
   const updateCounter = async () => {
     if (countData.count < MAX_COUNT) {
@@ -75,6 +120,10 @@ async function main() {
       setTimeout(updateCounter, randomInterval(100, 320));
     } else {
       console.log(`Reached max count of ${MAX_COUNT}`);
+      await deleteAllFiles();
+      const newGeneration = await incrementGeneration();
+      console.log(`Restarting - Generation ${newGeneration}`);
+      setTimeout(startCounter, 100);
     }
   };
   
@@ -89,4 +138,4 @@ async function main() {
   takeSnapshot();
 }
 
-main().catch(console.error);
+startCounter().catch(console.error);

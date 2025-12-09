@@ -72,7 +72,7 @@ async function main() {
     if (countData.count < MAX_COUNT) {
       countData = await updateCount(countData);
       console.log(`Count: ${countData.count}`);
-      setTimeout(updateCounter, randomInterval(300, 1200));
+      setTimeout(updateCounter, randomInterval(100, 320));
     } else {
       console.log(`Reached max count of ${MAX_COUNT}`);
     }

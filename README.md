@@ -5,7 +5,7 @@ A simple Bun app that counts up to 2500 with random intervals and periodic snaps
 ## Features
 
 - Counts from 0 to 2500
-- Updates on random intervals between 300ms and 1200ms
+- Updates on random intervals between 100ms and 320ms
 - Creates snapshots every 6-12 seconds (random interval)
 - Stores count in `./storage/count.json`
 - Stores snapshots in `./storage/snapshots/`
